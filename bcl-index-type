@@ -1,0 +1,87 @@
+###加载工具包
+library(getopt)
+library(dplyr)
+
+###需要输入的参数
+###sample_sheet: sample_sheet的路径，sample_sheet要存在样品名称、I5index序列、I7index序列、目标数据量、文库类型
+###out: 指定输出成功样本的路径
+###out2: 指定与其他样本有重叠index样本的路径
+spec <- matrix(
+  c("sample_sheet_format",  "sf", 1, "character", "This is a sample_sheet path",
+    "bcl_index_path", "o", 1, "character",  "This is output path",
+    "help", "h", 0, "character",  "This is a index check",
+    "sample","s",1,"character","This is a sample path",
+    "bcl_PJ","bp",1,"character","This is a project path"),
+  byrow=TRUE, ncol=5)
+opt <- getopt(spec=spec)
+
+if( !is.null(opt$help) || is.null(opt$sample_sheet_format) || is.null(opt$bcl_index_path)||is.null(opt$sample)||is.null(opt$bcl_PJ)){
+  cat(paste(getopt(spec=spec, usage = T), "\n"))
+  quit()
+}
+
+
+sample<-read.table(opt$sample,na.strings="",check.names=F,fill=T,head=T)
+print(sample)
+#####反向互补函数
+reverse_complement <- function(sequence) {
+  complemented_sequence <- chartr("ATCG", "TAGC", rev(strsplit(sequence, "")[[1]]))
+  return(paste(complemented_sequence, collapse = ""))
+}
+
+####创建index文件夹
+index_dir<-paste0("mkdir ",opt$bcl_index_path)
+index_dir2<-paste0("mkdir ",opt$bcl_index_path,"/index")
+index_dir3<-paste0(opt$bcl_index_path,"/index")
+system(index_dir)
+system(index_dir2)
+
+####对index进行分类并且进行反向互补
+####此处为单端类型
+sample1<-sample[which(is.na(sample$I5Index序列)==T),]
+long_index<-unique(nchar(sample1$I7Index序列))
+for (i in long_index) {
+  sample_sheet_name<-paste0("danduan_",i,"bp")
+  which(nchar(sample1$I7Index序列)==i)
+  sample_sheet<-data.frame(Lane=sample1$Lane[which(nchar(sample1$I7Index序列)==i)],
+                           Sample_ID=sample1$样品名称[which(nchar(sample1$I7Index序列)==i)],
+                           index=sample1$I7Index序列[which(nchar(sample1$I7Index序列)==i)])
+  print(sample_sheet)
+  sample_sheet_name2<-paste0("mkdir ",index_dir3,"/",sample_sheet_name)
+  sample_sheet_name3<-paste0(index_dir3,"/",sample_sheet_name,"/","Sample_sheet_tmp.csv")
+  system(sample_sheet_name2)
+  write.csv(sample_sheet,sample_sheet_name3,quote = F,row.names = F)
+  hb<-paste0("cat ",opt$sample_sheet_format," ",sample_sheet_name3,">",index_dir3,"/",sample_sheet_name,"/Sample_sheet.csv")
+  system(hb)
+  
+}
+
+####此处为双端类型
+sample2<-sample[which(is.na(sample$I5Index序列)!=T),]
+long_index<-unique(nchar(sample2$I7Index序列))
+for (i in long_index) {
+  sample_sheet_name<-paste0("shuangduan_",i,"bp")
+  which(nchar(sample2$I7Index序列)==i)
+  sample_sheet<-data.frame(Lane=sample2$Lane[which(nchar(sample2$I7Index序列)==i)],
+                           Sample_ID=sample2$样品名称[which(nchar(sample2$I7Index序列)==i)],
+                           index=sample2$I7Index序列[which(nchar(sample2$I7Index序列)==i)],
+                           index2=sample2$I5Index序列[which(nchar(sample2$I5Index序列)==i)])
+  
+  complemented_sequences <- lapply(sample_sheet$index2, reverse_complement)
+  complemented_sequences<-unlist(complemented_sequences)
+  sample_sheet$index2<-complemented_sequences
+  
+  sample_sheet_name2<-paste0("mkdir ",index_dir3,"/",sample_sheet_name)
+  sample_sheet_name3<-paste0(index_dir3,"/",sample_sheet_name,"/","Sample_sheet_tmp.csv")
+  system(sample_sheet_name2)
+  write.csv(sample_sheet,sample_sheet_name3,quote = F,row.names = F)
+  hb<-paste0("cat ",opt$sample_sheet_format," ",sample_sheet_name3,">",index_dir3,"/",sample_sheet_name,"/Sample_sheet.csv")
+  system(hb)
+
+}
+sample_list<-paste0("ls ",index_dir3,">",index_dir3,"/sample.txt")
+bcl_PJ_path<-paste0("mkdir ",opt$bcl_PJ)
+sample_PJ_name<-data.frame(x=sample$项目编号,y=sample$样品名称)
+system(sample_list)
+write.table(sample_PJ_name,paste0(index_dir3,"/name.txt"),quote=F,row.names=F,col.names =F)
+system(bcl_PJ_path)
